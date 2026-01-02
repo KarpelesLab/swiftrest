@@ -82,9 +82,7 @@ public actor TokenAuthentication: RestAuthentication {
             params["client_secret"] = clientSecret
         }
 
-        // Temporarily clear authentication to avoid recursive signing
-        await client.setAuthentication(nil)
-
+        // Don't clear auth - it's fine to send expired token, server ignores it
         let response: TokenResponse = try await client.request("OAuth2:token", method: .post, params: params)
 
         // Update tokens
@@ -93,9 +91,6 @@ public actor TokenAuthentication: RestAuthentication {
             refreshToken: response.refreshToken,
             expiresIn: response.expiresIn
         )
-
-        // Restore authentication
-        await client.setAuthentication(self)
     }
 }
 

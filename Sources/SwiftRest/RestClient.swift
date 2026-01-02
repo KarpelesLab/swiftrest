@@ -45,6 +45,11 @@ public actor RestClient {
         self.authentication = auth
     }
 
+    /// Enable or disable debug logging
+    public func setDebug(_ enabled: Bool) {
+        self.debug = enabled
+    }
+
     /// Get current authentication
     public func getAuthentication() -> RestAuthentication? {
         return self.authentication
