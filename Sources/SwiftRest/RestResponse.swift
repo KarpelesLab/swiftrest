@@ -8,7 +8,7 @@ public struct RestResponse: @unchecked Sendable {
     /// The raw data payload
     public let rawData: Data
 
-    /// Parsed data as JSON (lazy)
+    /// Parsed data as JSON (can be dictionary, array, or other JSON types)
     public let data: Any?
 
     /// Error message if result is "error"
@@ -34,6 +34,31 @@ public struct RestResponse: @unchecked Sendable {
 
     /// Redirect URL if result is "redirect"
     public let redirectUrl: String?
+
+    /// Access permissions for objects (keyed by object ID)
+    public let access: [String: AccessInfo]?
+
+    // MARK: - Convenience accessors
+
+    /// Get data as a dictionary (for single object responses)
+    public var dataDict: [String: Any]? {
+        return data as? [String: Any]
+    }
+
+    /// Get data as an array (for list responses)
+    public var dataArray: [[String: Any]]? {
+        return data as? [[String: Any]]
+    }
+
+    /// Check if data is an array
+    public var isDataArray: Bool {
+        return data is [Any]
+    }
+
+    /// Check if data is a dictionary
+    public var isDataDict: Bool {
+        return data is [String: Any]
+    }
 
     /// Initialize from HTTP response data
     init(data: Data, httpResponse: HTTPURLResponse, requestId: String?) throws {
@@ -70,6 +95,17 @@ public struct RestResponse: @unchecked Sendable {
             self.paging = PagingInfo(from: pagingDict)
         } else {
             self.paging = nil
+        }
+
+        // Parse access info
+        if let accessDict = json["access"] as? [String: [String: Any]] {
+            var accessMap: [String: AccessInfo] = [:]
+            for (objectId, accessData) in accessDict {
+                accessMap[objectId] = AccessInfo(from: accessData)
+            }
+            self.access = accessMap
+        } else {
+            self.access = nil
         }
 
         // Store the data payload
@@ -217,5 +253,41 @@ public struct PagingInfo: Sendable {
         self.count = count
         self.pageMax = pageMax
         self.resultsPerPage = resultsPerPage
+    }
+}
+
+/// Access permission information for an object
+public struct AccessInfo: @unchecked Sendable {
+    /// Required permission level (e.g., "R" for read, "W" for write, "A" for admin)
+    public let required: String?
+
+    /// Available permission level for the current user
+    public let available: String?
+
+    /// Raw access data for additional fields
+    public let rawData: [String: Any]
+
+    /// Check if the user can read the object
+    public var canRead: Bool {
+        guard let available = available else { return false }
+        return available.contains("R") || available.contains("W") || available.contains("A")
+    }
+
+    /// Check if the user can write/edit the object
+    public var canWrite: Bool {
+        guard let available = available else { return false }
+        return available.contains("W") || available.contains("A")
+    }
+
+    /// Check if the user has admin access to the object
+    public var canAdmin: Bool {
+        guard let available = available else { return false }
+        return available.contains("A")
+    }
+
+    init(from dict: [String: Any]) {
+        self.required = dict["required"] as? String
+        self.available = dict["available"] as? String
+        self.rawData = dict
     }
 }
