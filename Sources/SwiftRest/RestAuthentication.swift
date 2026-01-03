@@ -82,8 +82,8 @@ public actor TokenAuthentication: RestAuthentication {
             params["client_secret"] = clientSecret
         }
 
-        // Don't clear auth - it's fine to send expired token, server ignores it
-        let response: TokenResponse = try await client.request("OAuth2:token", method: .post, params: params)
+        // Use requestRaw for OAuth2 endpoint (returns nude JSON, not wrapped in result/data)
+        let response: TokenResponse = try await client.requestRaw("OAuth2:token", method: .post, params: params)
 
         // Update tokens
         update(
@@ -94,19 +94,13 @@ public actor TokenAuthentication: RestAuthentication {
     }
 }
 
-/// Token response from OAuth2 endpoint
+/// Token response from OAuth2 endpoint (nude JSON format)
 private struct TokenResponse: Decodable {
     let accessToken: String
     let refreshToken: String?
     let expiresIn: TimeInterval?
     let tokenType: String?
-
-    enum CodingKeys: String, CodingKey {
-        case accessToken = "access_token"
-        case refreshToken = "refresh_token"
-        case expiresIn = "expires_in"
-        case tokenType = "token_type"
-    }
+    // Note: uses snake_case decoding strategy, so no CodingKeys needed
 }
 
 /// Storage for persisting tokens

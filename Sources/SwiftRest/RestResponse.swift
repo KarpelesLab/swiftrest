@@ -43,8 +43,20 @@ public struct RestResponse: @unchecked Sendable {
 
         // Parse JSON response
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            #if DEBUG
+            if let rawString = String(data: data, encoding: .utf8) {
+                print("🔴 REST Invalid JSON response: \(rawString.prefix(500))")
+            }
+            #endif
             throw RestError.invalidResponse
         }
+
+        #if DEBUG
+        // Log successful responses for debugging OAuth issues
+        if let result = json["result"] as? String, result == "success" {
+            print("✅ REST Response: result=\(result), data keys=\((json["data"] as? [String: Any])?.keys.sorted() ?? [])")
+        }
+        #endif
 
         self.result = json["result"] as? String ?? "error"
         self.error = json["error"] as? String
@@ -65,10 +77,26 @@ public struct RestResponse: @unchecked Sendable {
 
         // Check for errors
         if self.result == "error" {
-            // Check for token expiration
+            // Debug: log error details
+            #if DEBUG
+            print("🔴 REST API Error: message=\(self.error ?? "nil"), token=\(self.token ?? "nil"), extra=\(self.extra ?? "nil"), code=\(self.code ?? -1)")
+            // Log full JSON when error has no message (helps debug OAuth issues)
+            if self.error == nil {
+                if let rawString = String(data: data, encoding: .utf8) {
+                    print("🔴 REST Full error response: \(rawString.prefix(1000))")
+                }
+            }
+            #endif
+
+            // Check for token expiration (various formats the API might use)
             if self.token == "invalid_request_token" && self.extra == "token_expired" {
                 throw RestError.tokenExpired
             }
+            // Also check for 401 HTTP status or explicit token errors
+            if self.code == 401 || self.extra == "token_expired" || self.error?.contains("token") == true {
+                throw RestError.tokenExpired
+            }
+
             throw RestError.apiError(
                 message: self.error ?? "Unknown error",
                 code: self.code,
@@ -77,8 +105,11 @@ public struct RestResponse: @unchecked Sendable {
             )
         }
 
-        // Check for redirect
+        // Check for redirect (often means login required)
         if self.result == "redirect" {
+            #if DEBUG
+            print("🔄 REST API Redirect: url=\(self.redirectUrl ?? "nil")")
+            #endif
             throw RestError.redirect(url: self.redirectUrl ?? "")
         }
     }

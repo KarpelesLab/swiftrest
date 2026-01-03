@@ -89,8 +89,216 @@ public actor RestClient {
                 try await auth.refresh(using: self)
                 return try await request(endpoint, method: method, params: params)
             }
+            if case .redirect = error, let auth = authentication as? TokenAuthentication {
+                // Redirect might mean auth is invalid - try refresh
+                try await auth.refresh(using: self)
+                return try await request(endpoint, method: method, params: params)
+            }
             throw error
         }
+    }
+
+    // MARK: - Authentication-Required Requests
+
+    /// Perform a request that requires authentication
+    /// Throws `loginRequired` if no authentication is configured
+    public func authRequest<T: Decodable>(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> T {
+        guard authentication != nil else {
+            throw RestError.loginRequired
+        }
+        return try await request(endpoint, method: method, params: params)
+    }
+
+    /// Perform a request that requires authentication (raw response)
+    /// Throws `loginRequired` if no authentication is configured
+    public func authRequest(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> RestResponse {
+        guard authentication != nil else {
+            throw RestError.loginRequired
+        }
+        return try await performRequest(endpoint, method: method, params: params)
+    }
+
+    /// Perform an authentication-required request with automatic token refresh
+    /// Throws `loginRequired` if no authentication is configured
+    public func authRequestWithRetry<T: Decodable>(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> T {
+        guard authentication != nil else {
+            throw RestError.loginRequired
+        }
+        do {
+            return try await request(endpoint, method: method, params: params)
+        } catch let error as RestError {
+            // Token expired or redirect (server might redirect to login when token is invalid)
+            if case .tokenExpired = error, let auth = authentication as? TokenAuthentication {
+                try await auth.refresh(using: self)
+                return try await request(endpoint, method: method, params: params)
+            }
+            if case .redirect = error, let auth = authentication as? TokenAuthentication {
+                // Redirect might mean auth is required/invalid - try refresh
+                try await auth.refresh(using: self)
+                return try await request(endpoint, method: method, params: params)
+            }
+            throw error
+        }
+    }
+
+    /// Perform an authentication-required request with automatic token refresh (raw response)
+    /// Throws `loginRequired` if no authentication is configured
+    public func authRequestWithRetry(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> RestResponse {
+        guard authentication != nil else {
+            throw RestError.loginRequired
+        }
+        do {
+            return try await performRequest(endpoint, method: method, params: params)
+        } catch let error as RestError {
+            // Token expired or redirect (server might redirect to login when token is invalid)
+            if case .tokenExpired = error, let auth = authentication as? TokenAuthentication {
+                try await auth.refresh(using: self)
+                return try await performRequest(endpoint, method: method, params: params)
+            }
+            if case .redirect = error, let auth = authentication as? TokenAuthentication {
+                // Redirect might mean auth is required/invalid - try refresh
+                try await auth.refresh(using: self)
+                return try await performRequest(endpoint, method: method, params: params)
+            }
+            throw error
+        }
+    }
+
+    // MARK: - Optionally-Authenticated Requests
+
+    /// Perform a request that optionally uses authentication
+    /// If auth is configured, uses it; otherwise makes unauthenticated request
+    public func optAuthRequest<T: Decodable>(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> T {
+        // Just use the normal request - it will apply auth if available
+        return try await request(endpoint, method: method, params: params)
+    }
+
+    /// Perform a request that optionally uses authentication (raw response)
+    /// If auth is configured, uses it; otherwise makes unauthenticated request
+    public func optAuthRequest(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> RestResponse {
+        // Just use the normal request - it will apply auth if available
+        return try await performRequest(endpoint, method: method, params: params)
+    }
+
+    /// Perform an optionally-authenticated request with automatic token refresh
+    /// If auth is configured, uses it with refresh; otherwise makes unauthenticated request
+    public func optAuthRequestWithRetry<T: Decodable>(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> T {
+        // If no auth, just make unauthenticated request
+        guard authentication != nil else {
+            return try await request(endpoint, method: method, params: params)
+        }
+        // Otherwise use retry logic
+        do {
+            return try await request(endpoint, method: method, params: params)
+        } catch let error as RestError {
+            if case .tokenExpired = error, let auth = authentication as? TokenAuthentication {
+                try await auth.refresh(using: self)
+                return try await request(endpoint, method: method, params: params)
+            }
+            if case .redirect = error, let auth = authentication as? TokenAuthentication {
+                // Redirect might mean auth is invalid - try refresh
+                try await auth.refresh(using: self)
+                return try await request(endpoint, method: method, params: params)
+            }
+            throw error
+        }
+    }
+
+    /// Perform an optionally-authenticated request with automatic token refresh (raw response)
+    /// If auth is configured, uses it with refresh; otherwise makes unauthenticated request
+    public func optAuthRequestWithRetry(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> RestResponse {
+        // If no auth, just make unauthenticated request
+        guard authentication != nil else {
+            return try await performRequest(endpoint, method: method, params: params)
+        }
+        // Otherwise use retry logic
+        do {
+            return try await performRequest(endpoint, method: method, params: params)
+        } catch let error as RestError {
+            if case .tokenExpired = error, let auth = authentication as? TokenAuthentication {
+                try await auth.refresh(using: self)
+                return try await performRequest(endpoint, method: method, params: params)
+            }
+            if case .redirect = error, let auth = authentication as? TokenAuthentication {
+                // Redirect might mean auth is invalid - try refresh
+                try await auth.refresh(using: self)
+                return try await performRequest(endpoint, method: method, params: params)
+            }
+            throw error
+        }
+    }
+
+    // MARK: - Raw/Nude Requests (bypass RestResponse parsing)
+
+    /// Perform a request and decode the response directly (no result/data wrapper)
+    /// Use for endpoints that return raw JSON (e.g., OAuth2 token endpoint)
+    public func requestRaw<T: Decodable>(
+        _ endpoint: String,
+        method: HTTPMethod = .get,
+        params: [String: Any]? = nil
+    ) async throws -> T {
+        let request = try await buildRequest(endpoint, method: method, params: params)
+
+        if debug {
+            logRequest(request, params: params)
+        }
+
+        let (data, response) = try await session.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw RestError.invalidResponse
+        }
+
+        if debug {
+            logResponse(httpResponse, data: data)
+        }
+
+        // Check for HTTP errors
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            // Try to parse error from response
+            if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let error = json["error"] as? String ?? json["error_description"] as? String
+                throw RestError.httpError(statusCode: httpResponse.statusCode, message: error)
+            }
+            throw RestError.httpError(statusCode: httpResponse.statusCode, message: nil)
+        }
+
+        // Decode directly from response body
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        return try decoder.decode(T.self, from: data)
     }
 
     // MARK: - Internal Request Handling
@@ -101,6 +309,10 @@ public actor RestClient {
         params: [String: Any]?
     ) async throws -> RestResponse {
         let request = try await buildRequest(endpoint, method: method, params: params)
+
+        if debug {
+            print("🌐 REST: \(method.rawValue) \(endpoint)")
+        }
 
         if debug {
             logRequest(request, params: params)
