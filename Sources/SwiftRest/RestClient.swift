@@ -288,11 +288,13 @@ public actor RestClient {
         // Check for HTTP errors
         guard (200..<300).contains(httpResponse.statusCode) else {
             // Try to parse error from response
+            var errorMessage: String? = nil
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                let error = json["error"] as? String ?? json["error_description"] as? String
-                throw RestError.httpError(statusCode: httpResponse.statusCode, message: error)
+                errorMessage = json["error"] as? String ?? json["error_description"] as? String ?? json["message"] as? String
+            } else if let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                errorMessage = text
             }
-            throw RestError.httpError(statusCode: httpResponse.statusCode, message: nil)
+            throw RestError.httpError(statusCode: httpResponse.statusCode, message: errorMessage)
         }
 
         // Decode directly from response body
@@ -581,14 +583,21 @@ extension RestClient {
             request = try await auth.sign(request: request)
         }
 
-        let (_, response) = try await uploadSession.data(for: request)
+        let (responseData, response) = try await uploadSession.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw RestError.invalidResponse
         }
 
         guard (200..<300).contains(httpResponse.statusCode) else {
-            throw RestError.httpError(statusCode: httpResponse.statusCode, message: nil)
+            // Try to extract error message from response body
+            var errorMessage: String? = nil
+            if let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any] {
+                errorMessage = json["error"] as? String ?? json["error_description"] as? String ?? json["message"] as? String
+            } else if let text = String(data: responseData, encoding: .utf8), !text.isEmpty {
+                errorMessage = text
+            }
+            throw RestError.httpError(statusCode: httpResponse.statusCode, message: errorMessage)
         }
     }
 
