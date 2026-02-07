@@ -423,6 +423,16 @@ extension RestClient {
         return try response.decode()
     }
 
+    /// Upload a file and return the raw response
+    public func upload(
+        _ endpoint: String,
+        file: URL,
+        params: [String: Any] = [:],
+        progress: ((Double) -> Void)? = nil
+    ) async throws -> RestResponse {
+        return try await uploadFile(endpoint, file: file, params: params, progress: progress)
+    }
+
     /// Upload data using the chunked upload protocol
     public func upload<T: Decodable>(
         _ endpoint: String,
@@ -441,6 +451,25 @@ extension RestClient {
             progress: progress
         )
         return try response.decode()
+    }
+
+    /// Upload data and return the raw response
+    public func upload(
+        _ endpoint: String,
+        data: Data,
+        filename: String,
+        mimeType: String,
+        params: [String: Any] = [:],
+        progress: ((Double) -> Void)? = nil
+    ) async throws -> RestResponse {
+        return try await uploadData(
+            endpoint,
+            data: data,
+            filename: filename,
+            mimeType: mimeType,
+            params: params,
+            progress: progress
+        )
     }
 
     private func uploadFile(
