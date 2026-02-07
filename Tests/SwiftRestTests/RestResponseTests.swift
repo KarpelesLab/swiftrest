@@ -203,6 +203,179 @@ final class RestResponseTests: XCTestCase {
         }
     }
 
+    // MARK: - Data type handling tests
+
+    func testDataIsString() throws {
+        let json = """
+        {"result": "success", "data": "hello world"}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertEqual(response.dataString, "hello world")
+        XCTAssertNil(response.dataDict)
+        XCTAssertNil(response.dataArray)
+        XCTAssertNil(response.dataAnyArray)
+        XCTAssertFalse(response.isDataArray)
+        XCTAssertFalse(response.isDataDict)
+        XCTAssertFalse(response.isDataNil)
+    }
+
+    func testDataIsInteger() throws {
+        let json = """
+        {"result": "success", "data": 42}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertEqual(response.dataInt, 42)
+        XCTAssertEqual(response.dataDouble, 42.0)
+        XCTAssertNil(response.dataString)
+        XCTAssertNil(response.dataDict)
+        XCTAssertFalse(response.isDataDict)
+        XCTAssertFalse(response.isDataNil)
+    }
+
+    func testDataIsDouble() throws {
+        let json = """
+        {"result": "success", "data": 3.14}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertEqual(response.dataDouble, 3.14)
+        // 3.14 is not exactly representable as Int
+        XCTAssertNil(response.dataInt)
+        XCTAssertNil(response.dataString)
+    }
+
+    func testDataIsBool() throws {
+        let json = """
+        {"result": "success", "data": true}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertEqual(response.dataBool, true)
+        XCTAssertFalse(response.isDataNil)
+    }
+
+    func testDataIsBoolFalse() throws {
+        let json = """
+        {"result": "success", "data": false}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertEqual(response.dataBool, false)
+    }
+
+    func testDataIsNull() throws {
+        let json = """
+        {"result": "success", "data": null}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertNil(response.data)
+        XCTAssertTrue(response.isDataNil)
+        XCTAssertNil(response.dataDict)
+        XCTAssertNil(response.dataArray)
+        XCTAssertNil(response.dataString)
+        XCTAssertNil(response.dataInt)
+        XCTAssertNil(response.dataBool)
+    }
+
+    func testDataIsStringArray() throws {
+        let json = """
+        {"result": "success", "data": ["apple", "banana", "cherry"]}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertTrue(response.isDataArray)
+        XCTAssertFalse(response.isDataDict)
+        XCTAssertNotNil(response.dataAnyArray)
+        XCTAssertEqual(response.dataAnyArray?.count, 3)
+        // dataArray requires [[String: Any]], so should be nil for string arrays
+        XCTAssertNil(response.dataArray)
+    }
+
+    func testDataIsMixedArray() throws {
+        let json = """
+        {"result": "success", "data": [1, "two", true, null]}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertTrue(response.isDataArray)
+        XCTAssertNotNil(response.dataAnyArray)
+        XCTAssertEqual(response.dataAnyArray?.count, 4)
+    }
+
+    func testDataAbsent() throws {
+        let json = """
+        {"result": "success"}
+        """
+        let response = try makeResponse(json)
+
+        XCTAssertNil(response.data)
+        XCTAssertTrue(response.isDataNil)
+    }
+
+    // MARK: - Decode with various data types
+
+    func testDecodeString() throws {
+        let json = """
+        {"result": "success", "data": "hello"}
+        """
+        let response = try makeResponse(json)
+        let value: String = try response.decode()
+        XCTAssertEqual(value, "hello")
+    }
+
+    func testDecodeInt() throws {
+        let json = """
+        {"result": "success", "data": 42}
+        """
+        let response = try makeResponse(json)
+        let value: Int = try response.decode()
+        XCTAssertEqual(value, 42)
+    }
+
+    func testDecodeBool() throws {
+        let json = """
+        {"result": "success", "data": true}
+        """
+        let response = try makeResponse(json)
+        let value: Bool = try response.decode()
+        XCTAssertEqual(value, true)
+    }
+
+    func testDecodeStringArray() throws {
+        let json = """
+        {"result": "success", "data": ["a", "b", "c"]}
+        """
+        let response = try makeResponse(json)
+        let value: [String] = try response.decode()
+        XCTAssertEqual(value, ["a", "b", "c"])
+    }
+
+    func testDecodeNullThrowsNoData() throws {
+        let json = """
+        {"result": "success", "data": null}
+        """
+        let response = try makeResponse(json)
+        XCTAssertThrowsError(try response.decode(as: String.self)) { error in
+            XCTAssertEqual(error as? RestError, RestError.noData)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func makeResponse(_ json: String) throws -> RestResponse {
+        let data = Data(json.utf8)
+        let httpResponse = HTTPURLResponse(
+            url: URL(string: "https://example.com")!,
+            statusCode: 200,
+            httpVersion: nil,
+            headerFields: nil
+        )!
+        return try RestResponse(data: data, httpResponse: httpResponse, requestId: nil)
+    }
+
     func testGetBoolFromVariousTypes() throws {
         let json = """
         {

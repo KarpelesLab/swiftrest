@@ -45,9 +45,38 @@ public struct RestResponse: @unchecked Sendable {
         return data as? [String: Any]
     }
 
-    /// Get data as an array (for list responses)
+    /// Get data as an array of dictionaries (for list responses with object elements)
     public var dataArray: [[String: Any]]? {
         return data as? [[String: Any]]
+    }
+
+    /// Get data as a generic array (for list responses with any element type)
+    public var dataAnyArray: [Any]? {
+        return data as? [Any]
+    }
+
+    /// Get data as a string (for string responses)
+    public var dataString: String? {
+        return data as? String
+    }
+
+    /// Get data as an integer (for numeric responses)
+    public var dataInt: Int? {
+        if let int = data as? Int { return int }
+        if let double = data as? Double { return Int(exactly: double) }
+        return nil
+    }
+
+    /// Get data as a double (for numeric responses)
+    public var dataDouble: Double? {
+        if let double = data as? Double { return double }
+        if let int = data as? Int { return Double(int) }
+        return nil
+    }
+
+    /// Get data as a boolean (for boolean responses)
+    public var dataBool: Bool? {
+        return data as? Bool
     }
 
     /// Check if data is an array
@@ -58,6 +87,11 @@ public struct RestResponse: @unchecked Sendable {
     /// Check if data is a dictionary
     public var isDataDict: Bool {
         return data is [String: Any]
+    }
+
+    /// Check if data is nil/null
+    public var isDataNil: Bool {
+        return data == nil
     }
 
     /// Initialize from HTTP response data
@@ -79,7 +113,19 @@ public struct RestResponse: @unchecked Sendable {
         #if DEBUG
         // Log successful responses for debugging OAuth issues
         if let result = json["result"] as? String, result == "success" {
-            print("✅ REST Response: result=\(result), data keys=\((json["data"] as? [String: Any])?.keys.sorted() ?? [])")
+            let dataDesc: String
+            if let dict = json["data"] as? [String: Any] {
+                dataDesc = "dict keys=\(dict.keys.sorted())"
+            } else if let arr = json["data"] as? [Any] {
+                dataDesc = "array count=\(arr.count)"
+            } else if json["data"] is NSNull {
+                dataDesc = "null"
+            } else if let val = json["data"] {
+                dataDesc = "\(type(of: val))=\(val)"
+            } else {
+                dataDesc = "absent"
+            }
+            print("✅ REST Response: result=\(result), data: \(dataDesc)")
         }
         #endif
 
@@ -108,8 +154,9 @@ public struct RestResponse: @unchecked Sendable {
             self.access = nil
         }
 
-        // Store the data payload
-        self.data = json["data"]
+        // Store the data payload (normalize JSON null to Swift nil)
+        let rawDataValue = json["data"]
+        self.data = (rawDataValue is NSNull) ? nil : rawDataValue
 
         // Check for errors
         if self.result == "error" {
@@ -156,7 +203,7 @@ public struct RestResponse: @unchecked Sendable {
             throw RestError.noData
         }
 
-        let jsonData = try JSONSerialization.data(withJSONObject: dataValue)
+        let jsonData = try JSONSerialization.data(withJSONObject: dataValue, options: .fragmentsAllowed)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
